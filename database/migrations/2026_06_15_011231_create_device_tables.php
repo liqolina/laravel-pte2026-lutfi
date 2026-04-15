@@ -6,96 +6,68 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::create('device_esp', function (Blueprint $table) {
             $table->id();
-            $table->string('id_esp')->unique();
+            $table->string('id_esp');
             $table->string('name_esp');
-
-            $table->macAddress('mac_esp')->unique();
-            $table->ipAddress('ip_esp')->nullable();
-            $table->string('loc_esp')->nullable();
-
-            $table->timestamp('timestamp')->nullable();
-            $table->timestamps();
+            $table->string('mac_esp');
+            $table->string('ip_esp');
+            $table->string('loc_esp');
+            $table->timestamp('log_time')->nullable();
         });
 
         Schema::create('device_sensor', function (Blueprint $table) {
             $table->id();
-            $table->string('id_esp');
+            $table->foreignId('id_device')->constrained('device_esp')->cascadeOnDelete();
             $table->string('id_sensor');
             $table->string('name_sensor');
-
-            $table->decimal('val_A', 12, 2)->nullable();
-            $table->decimal('val_B', 12, 2)->nullable();
-            $table->decimal('val_C', 12, 2)->nullable();
-            $table->decimal('val_D', 12, 2)->nullable();
-            $table->decimal('val_E', 12, 2)->nullable();
-            $table->decimal('val_F', 12, 2)->nullable();
-            $table->decimal('val_G', 12, 2)->nullable();
-            $table->decimal('val_H', 12, 2)->nullable();
-
+            $table->decimal('val_A', 8, 2)->nullable();
+            $table->decimal('val_B', 8, 2)->nullable();
+            $table->decimal('val_C', 8, 2)->nullable();
+            $table->decimal('val_D', 8, 2)->nullable();
+            $table->decimal('val_E', 8, 2)->nullable();
+            $table->decimal('val_F', 8, 2)->nullable();
+            $table->decimal('val_G', 8, 2)->nullable();
+            $table->decimal('val_h', 8, 2)->nullable();
             $table->timestamp('timestamp')->nullable();
-            $table->timestamps();
-
-            $table->foreign('id_esp')
-                ->references('id_esp')
-                ->on('device_esp')
-                ->cascadeOnUpdate()
-                ->cascadeOnDelete();
-
-            $table->index(['id_esp', 'id_sensor']);
         });
 
         Schema::create('device_act', function (Blueprint $table) {
             $table->id();
-            $table->string('id_esp');
+            $table->foreignId('id_device')->constrained('device_esp')->cascadeOnDelete();
             $table->string('id_act');
             $table->string('name_act');
-
-            $table->decimal('val_A', 12, 2)->nullable();
-            $table->decimal('val_B', 12, 2)->nullable();
-            $table->decimal('val_C', 12, 2)->nullable();
-            $table->decimal('val_D', 12, 2)->nullable();
-
+            $table->decimal('val_A', 8, 2)->nullable();
+            $table->decimal('val_B', 8, 2)->nullable();
+            $table->decimal('val_C', 8, 2)->nullable();
+            $table->decimal('val_D', 8, 2)->nullable();
             $table->timestamp('timestamp')->nullable();
-            $table->timestamps();
-
-            $table->foreign('id_esp')
-                ->references('id_esp')
-                ->on('device_esp')
-                ->cascadeOnUpdate()
-                ->cascadeOnDelete();
-
-            $table->index(['id_esp', 'id_act']);
         });
+<<<<<<< HEAD
+=======
 
         Schema::create('status_news', function (Blueprint $table) {
             $table->id();
-            $table->string('id_esp');
-            $table->string('status_esp');
-            $table->string('news_esp')->nullable();
+            $table->foreignId('id_device')->constrained('device_esp')->cascadeOnDelete();
+            $table->string('status_device');
+            $table->string('news_device');
             $table->timestamp('timestamp')->nullable();
-            $table->timestamps();
-
-            $table->foreign('id_esp')
-                ->references('id_esp')
-                ->on('device_esp')
-                ->cascadeOnUpdate()
-                ->cascadeOnDelete();
-
-            $table->index(['id_esp', 'timestamp']);
         });
+>>>>>>> 4a671bb (Pembaruan kode)
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
-        Schema::dropIfExists('status_news');
         Schema::dropIfExists('device_act');
         Schema::dropIfExists('device_sensor');
         Schema::dropIfExists('device_esp');
     }
 };
-
-// kemudian untuk status ONLINE dan OFFLINE dengan cara membandingkan waktu 10 detik setelah waktu timestamp di database status_news

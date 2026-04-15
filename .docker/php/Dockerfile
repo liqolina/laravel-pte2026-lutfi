@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     libjpeg-dev \
     libfreetype6-dev \
-    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install PHP Extensions via Helper Script
