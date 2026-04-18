@@ -56,15 +56,6 @@ return new class extends Migration
             $table->string('news_device');
             $table->timestamp('timestamp')->nullable();
         });
-
-        Schema::create('hardware_esp', function (Blueprint $table) {
-            $table->id();
-            $table->string('id_esp');
-            $table->string('name_esp');
-            $table->string('topic_publish');
-            $table->string('topic_subcribe');
-            $table->timestamp('timestamp')->nullable();
-        });
     }
 
     /**
@@ -72,10 +63,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('hardware_esp');
-        Schema::dropIfExists('status_news');
         Schema::dropIfExists('device_act');
         Schema::dropIfExists('device_sensor');
+        Schema::dropIfExists('status_news');
         Schema::dropIfExists('device_esp');
     }
 };
