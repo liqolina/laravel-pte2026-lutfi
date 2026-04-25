@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ExportImportController;
+use App\Http\Controllers\MqttQueueController;
 
 Route::livewire('/', 'pages::auth.login')->name('login');
 Route::livewire('/dashboard', 'pages::dashboard.idx')->name('dashboard');
@@ -17,35 +19,32 @@ Route::livewire('/dataSensor','pages::logDatabase.dataSensor.idx')->name('dataSe
 Route::livewire('/exportimport','pages::logDatabase.exportimport.idx')->name('exportimport');
 Route::livewire('/logData','pages::logDatabase.logData.idx')->name('logData');
 
-Route::prefix('export-import')->name('export-import.')->group(function () {
+Route::post('/mqtt/queue', [MqttQueueController::class, 'store']);
 
-    Route::get('/device-esp/csv', [ExportImportController::class, 'exportDeviceEspCsv'])
-        ->name('device-esp.csv');
+Route::prefix('export-import')
+    ->name('export-import.')
+    ->group(function () {
+        Route::get('/device-esp/csv', [ExportImportController::class, 'exportDeviceEspCsv'])
+            ->name('device-esp.csv');
 
-    Route::get('/device-sensor/csv', [ExportImportController::class, 'exportDeviceSensorCsv'])
-        ->name('device-sensor.csv');
+        Route::get('/device-sensor/csv', [ExportImportController::class, 'exportDeviceSensorCsv'])
+            ->name('device-sensor.csv');
 
-    Route::get('/device-act/csv', [ExportImportController::class, 'exportDeviceActCsv'])
-        ->name('device-act.csv');
+        Route::get('/device-act/csv', [ExportImportController::class, 'exportDeviceActCsv'])
+            ->name('device-act.csv');
 
-    Route::get('/full/csv', [ExportImportController::class, 'exportFullCsv'])
-        ->name('full.csv');
+        Route::get('/full/csv', [ExportImportController::class, 'exportFullCsv'])
+            ->name('full.csv');
 
+        Route::get('/device-esp/pdf', [ExportImportController::class, 'exportDeviceEspPdf'])
+            ->name('device-esp.pdf');
 
-    Route::get('/device-esp/pdf', [ExportController::class, 'exportPdf'])
-        ->defaults('type', 'esp')
-        ->name('device-esp.pdf');
+        Route::get('/device-sensor/pdf', [ExportImportController::class, 'exportDeviceSensorPdf'])
+            ->name('device-sensor.pdf');
 
-    Route::get('/device-sensor/pdf', [ExportController::class, 'exportPdf'])
-        ->defaults('type', 'sensor')
-        ->name('device-sensor.pdf');
+        Route::get('/device-act/pdf', [ExportImportController::class, 'exportDeviceActPdf'])
+            ->name('device-act.pdf');
 
-    Route::get('/device-act/pdf', [ExportController::class, 'exportPdf'])
-        ->defaults('type', 'act')
-        ->name('device-act.pdf');
-
-    Route::get('/full/pdf', [ExportController::class, 'exportPdf'])
-        ->defaults('type', 'full')
-        ->name('full.pdf');
-
-});
+        Route::get('/full/pdf', [ExportImportController::class, 'exportFullPdf'])
+            ->name('full.pdf');
+    });

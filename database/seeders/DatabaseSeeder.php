@@ -16,16 +16,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        Role::findOrCreate('admin', 'web');
+        Role::findOrCreate('program', 'web');
 
-        Role::create(['name' => 'admin']);
-        Role::create(['name' => 'program']);
-
-        $user = User::factory()->create([
-            'name' => 'Admin',
-            'email' => 'admin@bems.id',
-            'password' => Hash::make('Ddw9889##'),
-        ]);
+        $user = User::firstOrCreate(
+            ['email' => 'admin@bems.id'],
+            [
+                'name' => 'Admin',
+                'password' => Hash::make('Ddw9889##'),
+            ]
+        );
 
         $user->assignRole('admin');
     }

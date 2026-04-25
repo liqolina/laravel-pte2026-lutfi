@@ -1,12 +1,37 @@
 <?php
 
 use Livewire\Component;
+use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
 
 new class extends Component
 {
+    use WithPagination;
+
     public string $search = '';
+    public string $selectedDevice = '';
     public string $selectedLoc = '';
+    public int $perPage = 10;
+
+    public function updatingSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingSelectedDevice(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingSelectedLoc(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingPerPage(): void
+    {
+        $this->resetPage();
+    }
 
     public function getLocations()
     {
@@ -18,31 +43,26 @@ new class extends Component
             ->get();
     }
 
+    public function getDevices()
+    {
+        return DB::table('device_esp')
+            ->select('id_esp', 'name_esp')
+            ->distinct()
+            ->orderBy('name_esp')
+            ->get();
+    }
+
     public function getDeviceEspRows()
     {
         $latestStatus = DB::table('status_news')
-            ->select('id_device', DB::raw('MAX(id) as latest_id'))
-            ->groupBy('id_device');
-
-        $sensorCount = DB::table('device_sensor')
-            ->select('id_device', DB::raw('COUNT(DISTINCT id_sensor) as total_sensor'))
-            ->groupBy('id_device');
-
-        $actCount = DB::table('device_act')
-            ->select('id_device', DB::raw('COUNT(DISTINCT id_act) as total_act'))
-            ->groupBy('id_device');
+            ->select('id_esp', DB::raw('MAX(id) as latest_id'))
+            ->groupBy('id_esp');
 
         return DB::table('device_esp as d')
             ->leftJoinSub($latestStatus, 'ls', function ($join) {
-                $join->on('d.id', '=', 'ls.id_device');
+                $join->on('ls.id_esp', '=', 'd.id_esp');
             })
-            ->leftJoin('status_news as s', 's.id', '=', 'ls.latest_id')
-            ->leftJoinSub($sensorCount, 'sc', function ($join) {
-                $join->on('d.id', '=', 'sc.id_device');
-            })
-            ->leftJoinSub($actCount, 'ac', function ($join) {
-                $join->on('d.id', '=', 'ac.id_device');
-            })
+            ->leftJoin('status_news as sn', 'sn.id', '=', 'ls.latest_id')
             ->select(
                 'd.id',
                 'd.id_esp',
@@ -50,13 +70,14 @@ new class extends Component
                 'd.mac_esp',
                 'd.ip_esp',
                 'd.loc_esp',
-                'd.log_time',
-                's.status_device',
-                's.news_device',
-                's.timestamp as status_time',
-                DB::raw('COALESCE(sc.total_sensor, 0) as total_sensor'),
-                DB::raw('COALESCE(ac.total_act, 0) as total_act')
+                'd.timestamp as device_timestamp',
+                'sn.status_esp',
+                'sn.news_esp',
+                'sn.timestamp as status_timestamp'
             )
+            ->when($this->selectedDevice !== '', function ($query) {
+                $query->where('d.id_esp', $this->selectedDevice);
+            })
             ->when($this->selectedLoc !== '', function ($query) {
                 $query->where('d.loc_esp', $this->selectedLoc);
             })
@@ -70,14 +91,15 @@ new class extends Component
                 });
             })
             ->orderBy('d.name_esp')
-            ->get();
+            ->paginate($this->perPage);
     }
 
     public function render()
     {
         return $this->view([
             'locations' => $this->getLocations(),
-            'devices'   => $this->getDeviceEspRows(),
+            'deviceList' => $this->getDevices(),
+            'devices' => $this->getDeviceEspRows(),
         ]);
     }
 };
@@ -89,9 +111,9 @@ new class extends Component
         {{-- FILTER --}}
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
-            <div class="md:col-span-2">
+            <div>
                 <label class="text-sm font-semibold mb-2 block">
-                    Cari Device
+                    Search
                 </label>
                 <input
                     type="text"
@@ -103,7 +125,22 @@ new class extends Component
 
             <div>
                 <label class="text-sm font-semibold mb-2 block">
-                    Lokasi
+                    List Device
+                </label>
+                <select wire:model.live="selectedDevice" class="select select-bordered w-full">
+                    <option value="">Semua Device</option>
+
+                    @foreach ($deviceList as $deviceOption)
+                        <option value="{{ $deviceOption->id_esp }}">
+                            {{ $deviceOption->name_esp }} ({{ $deviceOption->id_esp }})
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label class="text-sm font-semibold mb-2 block">
+                    List Location
                 </label>
                 <select wire:model.live="selectedLoc" class="select select-bordered w-full">
                     <option value="">Semua Lokasi</option>
@@ -118,6 +155,19 @@ new class extends Component
 
         </div>
 
+        <div class="flex justify-end mb-4">
+            <div class="w-full md:w-40">
+                <label class="text-sm font-semibold mb-2 block">
+                    Baris Tabel
+                </label>
+                <select wire:model.live="perPage" class="select select-bordered w-full">
+                    <option value="10">10</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+
         {{-- TABLE --}}
         <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
             <table class="table table-zebra table-sm">
@@ -129,11 +179,9 @@ new class extends Component
                         <th>MAC Address</th>
                         <th>IP Address</th>
                         <th>Lokasi</th>
-                        <th>Sensor</th>
-                        <th>Actuator</th>
                         <th>Status</th>
                         <th>News</th>
-                        <th>Log Time</th>
+                        <th>Timestamp</th>
                     </tr>
                 </thead>
 
@@ -141,7 +189,7 @@ new class extends Component
                     @forelse ($devices as $index => $device)
                         <tr>
                             <td class="font-semibold">
-                                {{ $index + 1 }}
+                                {{ ($devices->firstItem() ?? 1) + $index }}
                             </td>
 
                             <td>
@@ -172,21 +220,15 @@ new class extends Component
                             </td>
 
                             <td>
-                                <span class="badge badge-info badge-outline">
-                                    {{ $device->total_sensor }}
-                                </span>
-                            </td>
+                                @php
+                                    $isOnline = $device->status_timestamp
+                                        ? \Illuminate\Support\Carbon::parse($device->status_timestamp)->gte(now()->subSeconds(10))
+                                        : false;
+                                @endphp
 
-                            <td>
-                                <span class="badge badge-warning badge-outline">
-                                    {{ $device->total_act }}
-                                </span>
-                            </td>
-
-                            <td>
-                                @if ($device->status_device)
-                                    <span class="badge badge-success">
-                                        {{ $device->status_device }}
+                                @if ($device->status_timestamp)
+                                    <span class="badge {{ $isOnline ? 'badge-success' : 'badge-error' }}">
+                                        {{ $isOnline ? 'ONLINE' : 'OFFLINE' }}
                                     </span>
                                 @else
                                     <span class="badge badge-ghost">
@@ -196,22 +238,26 @@ new class extends Component
                             </td>
 
                             <td class="min-w-56">
-                                {{ $device->news_device ?? '-' }}
+                                {{ $device->news_esp ?? '-' }}
                             </td>
 
                             <td class="whitespace-nowrap">
-                                {{ $device->log_time ?? '-' }}
+                                {{ $device->status_timestamp ?? $device->device_timestamp ?? '-' }}
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="11" class="text-center py-8 opacity-60">
+                            <td colspan="9" class="text-center py-8 opacity-60">
                                 Data device ESP belum tersedia
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
+        </div>
+
+        <div class="mt-4">
+            {{ $devices->links() }}
         </div>
 
     </x-card>

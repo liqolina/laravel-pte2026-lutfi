@@ -35,6 +35,11 @@ class ExportImportController extends Controller
         return $this->exportService->downloadSingleCsv('device_act', $this->getDeviceId($request));
     }
 
+    public function exportStatusNewsCsv(Request $request)
+    {
+        return $this->exportService->downloadSingleCsv('status_news', $this->getDeviceId($request));
+    }
+
     public function exportFullCsv(Request $request)
     {
         return $this->exportService->downloadFullCsv($this->getDeviceId($request));
@@ -53,6 +58,11 @@ class ExportImportController extends Controller
     public function exportDeviceActPdf(Request $request)
     {
         return $this->exportService->downloadSinglePdf('device_act', $this->getDeviceId($request));
+    }
+
+    public function exportStatusNewsPdf(Request $request)
+    {
+        return $this->exportService->downloadSinglePdf('status_news', $this->getDeviceId($request));
     }
 
     public function exportFullPdf(Request $request)
