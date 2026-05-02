@@ -25,7 +25,11 @@ new #[Layout('layouts::guest')] class extends Component
             'email' => $this->email,
             'password' => $this->password
         ])) {
+<<<<<<< HEAD
+            return redirect()->route('admin');
+=======
             return redirect()->route('dashboard');
+>>>>>>> 4a671bb (Pembaruan kode)
         }
 
         $this->error('Email atau password salah', position: 'toast-top toast-center');

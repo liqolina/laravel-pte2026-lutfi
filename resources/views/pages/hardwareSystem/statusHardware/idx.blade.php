@@ -1,237 +1,319 @@
 <?php
 
 use Livewire\Component;
-use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
-use Carbon\Carbon;
 
 new class extends Component
 {
-    use WithPagination;
+    public $selectedLoc = '';
+    public $selectedDevice = '';
 
-    public string $search = '';
-    public string $selectedDevice = '';
-    public int $perPage = 10;
+    /* =========================================================
+     | SENSOR CONFIG
+     ========================================================= */
+    public $sensorUnits = [
+        'val_A' => ['label' => 'Voltage', 'unit' => 'V',  'icon' => 'o-bolt'],
+        'val_B' => ['label' => 'Current', 'unit' => 'A',  'icon' => 'o-arrow-trending-up'],
+        'val_C' => ['label' => 'Power',   'unit' => 'W',  'icon' => 'o-bolt'],
+        'val_D' => ['label' => 'Energy',  'unit' => 'Wh', 'icon' => 'o-chart-bar'],
+        'val_E' => ['label' => 'Freq',    'unit' => 'Hz', 'icon' => 'o-signal'],
+        'val_F' => ['label' => 'PF',      'unit' => 'PF', 'icon' => 'o-adjustments-horizontal'],
+        'val_G' => ['label' => 'Temp',    'unit' => '°C', 'icon' => 'o-fire'],
+        'val_h' => ['label' => 'Extra',   'unit' => '',   'icon' => 'o-cpu-chip'],
+    ];
 
-    public function updatingSearch(): void
+    /* =========================================================
+     | ACTUATOR CONFIG
+     ========================================================= */
+    public $actUnits = [
+        'val_A' => ['label' => 'Status', 'unit' => '', 'icon' => 'o-power'],
+        'val_B' => ['label' => 'Value B','unit' => '', 'icon' => 'o-cog-6-tooth'],
+        'val_C' => ['label' => 'Value C','unit' => '', 'icon' => 'o-bolt'],
+        'val_D' => ['label' => 'Value D','unit' => '', 'icon' => 'o-adjustments-horizontal'],
+    ];
+
+    /* =========================================================
+     | MOUNT
+     ========================================================= */
+    public function mount()
     {
-        $this->resetPage();
+        $this->selectedLoc = DB::table('device_esp')
+            ->whereNotNull('loc_esp')
+            ->orderBy('loc_esp')
+            ->value('loc_esp') ?? '';
+
+        $this->selectedDevice = DB::table('device_esp')
+            ->when($this->selectedLoc, fn ($q) => $q->where('loc_esp', $this->selectedLoc))
+            ->orderBy('name_esp')
+            ->value('id') ?? '';
     }
 
-    public function updatingSelectedDevice(): void
+    /* =========================================================
+     | EVENTS
+     ========================================================= */
+    public function updatedSelectedLoc()
     {
-        $this->resetPage();
+        $this->selectedDevice = DB::table('device_esp')
+            ->where('loc_esp', $this->selectedLoc)
+            ->orderBy('name_esp')
+            ->value('id') ?? '';
     }
 
-    public function updatingPerPage(): void
+    /* =========================================================
+     | DATA FETCH
+     ========================================================= */
+    public function getLocations()
     {
-        $this->resetPage();
+        return DB::table('device_esp')
+            ->select('loc_esp')
+            ->whereNotNull('loc_esp')
+            ->distinct()
+            ->orderBy('loc_esp')
+            ->get();
     }
 
     public function getDevices()
     {
-        return DB::table('hardware_esp')
-            ->select('id_esp', 'name_esp')
-            ->distinct()
+        return DB::table('device_esp')
+            ->when($this->selectedLoc, fn ($q) => $q->where('loc_esp', $this->selectedLoc))
             ->orderBy('name_esp')
-            ->orderBy('id_esp')
             ->get();
     }
 
-    public function getHardwareRows()
+    public function getSelectedDeviceData()
     {
-        $hasDeviceEsp = Schema::hasTable('device_esp');
+        if (!$this->selectedDevice) return null;
 
-        $query = DB::table('hardware_esp as h');
-
-        if ($hasDeviceEsp) {
-            $query->leftJoin('device_esp as d', 'h.id_esp', '=', 'd.id_esp');
-        }
-
-        $updatedAtExpression = $hasDeviceEsp
-            ? "COALESCE(d.timestamp, d.updated_at, d.created_at, h.updated_at, h.created_at)"
-            : "COALESCE(h.updated_at, h.created_at)";
-
-        $deviceTimestampExpression = $hasDeviceEsp
-            ? 'd.timestamp'
-            : 'NULL';
-
-        return $query
-            ->select([
-                'h.id',
-                'h.id_esp',
-                'h.name_esp',
-                'h.topic_publish',
-                'h.topic_subscribe',
-                DB::raw("{$updatedAtExpression} as updated_at_value"),
-                DB::raw("{$deviceTimestampExpression} as device_timestamp"),
-            ])
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('h.id_esp', $this->selectedDevice);
-            })
-            ->when($this->search !== '', function ($query) {
-                $search = trim($this->search);
-
-                $query->where(function ($q) use ($search) {
-                    $q->where('h.id_esp', 'like', '%' . $search . '%')
-                        ->orWhere('h.name_esp', 'like', '%' . $search . '%')
-                        ->orWhere('h.topic_publish', 'like', '%' . $search . '%')
-                        ->orWhere('h.topic_subscribe', 'like', '%' . $search . '%');
-                });
-            })
-            ->orderBy('h.name_esp')
-            ->orderBy('h.id_esp')
-            ->paginate($this->perPage);
+        return DB::table('device_esp')
+            ->where('id', $this->selectedDevice)
+            ->first();
     }
 
-    protected function resolveConnectionStatus(?string $timestamp): string
+    public function getLatestSensors()
     {
-        if (blank($timestamp)) {
-            return 'OFFLINE';
-        }
+        if (!$this->selectedDevice) return collect();
 
-        try {
-            $now = now();
-            $lastSeen = Carbon::parse($timestamp);
-
-            return $lastSeen->betweenIncluded(
-                $now->copy()->subSeconds(30),
-                $now
-            ) ? 'ONLINE' : 'OFFLINE';
-        } catch (\Throwable $e) {
-            return 'OFFLINE';
-        }
+        return DB::table('device_sensor')
+            ->where('id_device', $this->selectedDevice)
+            ->orderByDesc('timestamp')
+            ->get()
+            ->unique('id_sensor')
+            ->values();
     }
 
+    public function getLatestActs()
+    {
+        if (!$this->selectedDevice) return collect();
+
+        return DB::table('device_act')
+            ->where('id_device', $this->selectedDevice)
+            ->orderByDesc('timestamp')
+            ->get()
+            ->unique('id_act')
+            ->values();
+    }
+
+    public function getStatusNews()
+    {
+        if (!$this->selectedDevice) return null;
+
+        return DB::table('status_news')
+            ->where('id_device', $this->selectedDevice)
+            ->orderByDesc('timestamp')
+            ->first();
+    }
+
+    /* =========================================================
+     | RENDER
+     ========================================================= */
     public function render()
     {
-        $devices = $this->getHardwareRows();
-
-        $devices->getCollection()->transform(function ($device) {
-            $device->status_connection = $this->resolveConnectionStatus($device->device_timestamp);
-
-            return $device;
-        });
-
         return $this->view([
-            'deviceList' => $this->getDevices(),
-            'devices' => $devices,
+            'locations'   => $this->getLocations(),
+            'devices'     => $this->getDevices(),
+            'device'      => $this->getSelectedDeviceData(),
+            'sensors'     => $this->getLatestSensors(),
+            'acts'        => $this->getLatestActs(),
+            'statusNews'  => $this->getStatusNews(),
         ]);
     }
 };
 ?>
 
 <div wire:poll.5s>
-    <x-card title="Database | Hardware ESP" shadow separator>
+    <x-card title="Admin | Device Sensor Dashboard" shadow separator>
 
+        {{-- ================= FILTER ================= --}}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-
             <div>
-                <label class="text-sm font-semibold mb-2 block">
-                    Search
-                </label>
-                <input
-                    type="text"
-                    wire:model.live.debounce.500ms="search"
-                    placeholder="Cari ID device, nama, topic publish, atau topic subscribe..."
-                    class="input input-bordered w-full"
-                >
-            </div>
-
-            <div>
-                <label class="text-sm font-semibold mb-2 block">
-                    List Device
-                </label>
-                <select wire:model.live="selectedDevice" class="select select-bordered w-full">
-                    <option value="">Semua Device</option>
-
-                    @foreach ($deviceList as $deviceOption)
-                        <option value="{{ $deviceOption->id_esp }}">
-                            {{ $deviceOption->name_esp ?: 'Tanpa Nama' }} ({{ $deviceOption->id_esp }})
+                <label class="text-sm font-semibold mb-2 block">Lokasi</label>
+                <select wire:model.live="selectedLoc" class="select select-bordered w-full">
+                    <option value="">Semua Lokasi</option>
+                    @foreach ($locations as $location)
+                        <option value="{{ $location->loc_esp }}">
+                            {{ $location->loc_esp }}
                         </option>
                     @endforeach
                 </select>
             </div>
 
-        </div>
-
-        <div class="flex justify-end mb-4">
-            <div class="w-full md:w-40">
-                <label class="text-sm font-semibold mb-2 block">
-                    Baris Tabel
-                </label>
-                <select wire:model.live="perPage" class="select select-bordered w-full">
-                    <option value="10">10</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
+            <div>
+                <label class="text-sm font-semibold mb-2 block">Device</label>
+                <select wire:model.live="selectedDevice" class="select select-bordered w-full">
+                    <option value="">Pilih Device</option>
+                    @foreach ($devices as $dev)
+                        <option value="{{ $dev->id }}">
+                            {{ $dev->name_esp }} - {{ $dev->id_esp }}
+                        </option>
+                    @endforeach
                 </select>
             </div>
         </div>
 
-        <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
-            <table class="table table-zebra table-sm">
-                <thead class="bg-base-200">
-                    <tr>
-                        <th>No</th>
-                        <th>ID Device</th>
-                        <th>Topic Publish</th>
-                        <th>Topic Subscribe</th>
-                        <th>Status</th>
-                        <th>Updated At</th>
-                    </tr>
-                </thead>
+        {{-- ================= DEVICE INFO ================= --}}
+        @if ($device)
+            <div class="mb-6 rounded-2xl border border-dashed bg-base-100 p-5">
+                <div class="flex flex-col md:flex-row justify-between gap-2">
+                    <div>
+                        <div class="text-xl font-bold">
+                            {{ $device->name_esp }}
+                        </div>
+                        <div class="text-sm opacity-70">
+                            {{ $device->id_esp }} | {{ $device->mac_esp }} | {{ $device->ip_esp }}
+                        </div>
+                    </div>
 
-                <tbody>
-                    @forelse ($devices as $index => $device)
-                        <tr>
-                            <td class="font-semibold">
-                                {{ ($devices->firstItem() ?? 1) + $index }}
-                            </td>
+                    <div class="text-sm font-semibold opacity-70">
+                        Lokasi: {{ $device->loc_esp }}
+                    </div>
+                </div>
+            </div>
+        @endif
 
-                            <td>
-                                <span class="badge badge-outline">
-                                    {{ $device->id_esp }}
-                                </span>
-                            </td>
+        {{-- ================= SENSOR ================= --}}
+        <div class="mb-10">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Sensor</h3>
+                <span class="text-xs opacity-60">Live 5s</span>
+            </div>
 
-                            <td class="whitespace-nowrap">
-                                {{ $device->topic_publish ?: '-' }}
-                            </td>
+            @if ($sensors->count())
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    @foreach ($sensors as $sensor)
+                        <div class="border border-dashed rounded-2xl bg-base-100 p-4 hover:shadow-md transition">
 
-                            <td class="whitespace-nowrap">
-                                {{ $device->topic_subscribe ?: '-' }}
-                            </td>
+                            <div class="mb-3">
+                                <div class="font-bold">{{ $sensor->name_sensor }}</div>
+                                <div class="text-xs opacity-60">{{ $sensor->id_sensor }}</div>
+                            </div>
 
-                            <td>
-                                @if ($device->status_connection === 'ONLINE')
-                                    <span class="badge badge-success">
-                                        ONLINE
-                                    </span>
-                                @else
-                                    <span class="badge badge-error">
-                                        OFFLINE
-                                    </span>
-                                @endif
-                            </td>
+                            <div class="space-y-2">
+                                @foreach ($sensorUnits as $field => $meta)
+                                    @if (!is_null($sensor->{$field}))
+                                        <div class="flex items-center justify-between bg-base-200 rounded-xl p-3">
+                                            
+                                            <div class="flex items-center gap-2">
+                                                <x-icon name="{{ $meta['icon'] }}" class="w-5 h-5" />
+                                                <span class="text-sm">{{ $meta['label'] }}</span>
+                                            </div>
 
-                            <td class="whitespace-nowrap">
-                                {{ $device->updated_at_value ?: '-' }}
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center py-8 opacity-60">
-                                Data hardware ESP belum tersedia
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                                            <div class="font-bold text-lg">
+                                                {{ number_format((float) $sensor->{$field}, 2) }}
+                                            </div>
+
+                                            <div class="text-sm opacity-70 w-10 text-right">
+                                                {{ $meta['unit'] }}
+                                            </div>
+
+                                        </div>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="p-6 text-center border border-dashed rounded-2xl opacity-60">
+                    No sensor data
+                </div>
+            @endif
         </div>
 
-        <div class="mt-4">
-            {{ $devices->links() }}
+        {{-- ================= ACTUATOR ================= --}}
+        <div class="mb-10">
+            <h3 class="text-lg font-bold mb-4">Actuator</h3>
+
+            @if ($acts->count())
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    @foreach ($acts as $act)
+                        <div class="border border-dashed rounded-2xl bg-base-100 p-4 hover:shadow-md transition">
+
+                            <div class="mb-3">
+                                <div class="font-bold">{{ $act->name_act }}</div>
+                                <div class="text-xs opacity-60">{{ $act->id_act }}</div>
+                            </div>
+
+                            <div class="space-y-2">
+                                @foreach ($actUnits as $field => $meta)
+                                    @if (!is_null($act->{$field}))
+                                        <div class="flex items-center justify-between bg-base-200 rounded-xl p-3">
+
+                                            <div class="flex items-center gap-2">
+                                                <x-icon name="{{ $meta['icon'] }}" class="w-5 h-5" />
+                                                <span class="text-sm">{{ $meta['label'] }}</span>
+                                            </div>
+
+                                            <div class="font-bold text-lg">
+                                                {{ number_format((float) $act->{$field}, 2) }}
+                                            </div>
+
+                                            <div class="text-sm opacity-70 w-10 text-right">
+                                                {{ $meta['unit'] }}
+                                            </div>
+
+                                        </div>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="p-6 text-center border border-dashed rounded-2xl opacity-60">
+                    No actuator data
+                </div>
+            @endif
+        </div>
+
+        {{-- ================= STATUS ================= --}}
+        <div class="mt-6">
+            <h3 class="text-lg font-bold mb-4">Status Device</h3>
+
+            @if ($statusNews)
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <div class="border border-dashed rounded-2xl p-5 bg-base-100">
+                        <div class="text-sm opacity-60">Status</div>
+                        <div class="text-2xl font-bold">
+                            {{ $statusNews->status_device }}
+                        </div>
+                    </div>
+
+                    <div class="border border-dashed rounded-2xl p-5 bg-base-100">
+                        <div class="text-sm opacity-60">News</div>
+                        <div class="font-semibold">
+                            {{ $statusNews->news_device }}
+                        </div>
+                    </div>
+
+                </div>
+            @else
+                <div class="p-6 text-center border border-dashed rounded-2xl opacity-60">
+                    No status data
+                </div>
+            @endif
         </div>
 
     </x-card>

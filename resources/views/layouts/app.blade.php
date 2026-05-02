@@ -79,7 +79,7 @@
                                         class="btn-circle btn-ghost btn-xs"
                                         tooltip-left="logoff"
                                         no-wire-navigate
-                                        link="/"
+                                        link="/logout"
                                     />
                                 </x-slot:actions>
                             </x-list-item>
@@ -143,26 +143,26 @@
                                 <x-menu-item 
                                     title="Add Hardware" 
                                     icon="o-plus-circle" 
-                                    link="/addHardware" 
+                                    link="/admin/hardware/create" 
                                 />
 
-                                <!-- <x-menu-item 
+                                <x-menu-item 
                                     title="List Hardware" 
                                     icon="o-list-bullet" 
                                     link="/admin/hardware" 
-                                /> -->
+                                />
 
                                 <x-menu-item 
                                     title="Status Hardware" 
                                     icon="o-signal" 
-                                    link="/statusHardware" 
+                                    link="/admin/hardware/status" 
                                 />
 
-                                <!-- <x-menu-item 
+                                <x-menu-item 
                                     title="Monitoring Sensor" 
                                     icon="o-presentation-chart-line" 
                                     link="/admin/hardware/monitoring" 
-                                /> -->
+                                />
                             </x-menu-sub>
 
                             <x-menu-separator />
@@ -172,16 +172,16 @@
                                 title="Client" 
                                 icon="o-users"
                             >
-                                <!-- <x-menu-item 
+                                <x-menu-item 
                                     title="Data Client" 
                                     icon="o-user-group" 
                                     link="/admin/client" 
-                                /> -->
+                                />
 
                                 <x-menu-item 
                                     title="Add Client" 
                                     icon="o-user-plus" 
-                                    link="/addClient" 
+                                    link="/admin/client/create" 
                                 />
                             </x-menu-sub>
 

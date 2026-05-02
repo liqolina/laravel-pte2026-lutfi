@@ -1,114 +1,18 @@
 <?php
 
 use Livewire\Component;
-use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
 
 new class extends Component
 {
-    use WithPagination;
-
     public string $search = '';
     public string $selectedLoc = '';
     public string $selectedDevice = '';
-    public string $selectedSensor = '';
-    public string $selectedAct = '';
-
-    public int|string $devicePerPage = 10;
-    public int|string $sensorPerPage = 10;
-    public int|string $actPerPage = 10;
-
-    protected function resetAllPages(): void
-    {
-        $this->resetPage('devicePage');
-        $this->resetPage('sensorPage');
-        $this->resetPage('actPage');
-    }
-
-    public function updatingSearch(): void
-    {
-        $this->resetAllPages();
-    }
-
-    public function updatingSelectedDevice(): void
-    {
-        $this->selectedSensor = '';
-        $this->selectedAct = '';
-        $this->resetAllPages();
-    }
-
-    public function updatingSelectedSensor(): void
-    {
-        $this->resetAllPages();
-    }
-
-    public function updatingSelectedAct(): void
-    {
-        $this->resetAllPages();
-    }
-
-    public function updatingSelectedLoc(): void
-    {
-        $this->resetAllPages();
-    }
-
-    public function updatingDevicePerPage(): void
-    {
-        $this->resetPage('devicePage');
-    }
-
-    public function updatingSensorPerPage(): void
-    {
-        $this->resetPage('sensorPage');
-    }
-
-    public function updatingActPerPage(): void
-    {
-        $this->resetPage('actPage');
-    }
 
     public function getDeviceOptions()
     {
         return DB::table('device_esp')
-            ->select('id_esp', 'name_esp', 'loc_esp')
-            ->when($this->selectedLoc !== '', function ($query) {
-                $query->where('loc_esp', $this->selectedLoc);
-            })
             ->orderBy('name_esp')
-            ->get();
-    }
-
-    public function getSensorOptions()
-    {
-        return DB::table('device_sensor as ds')
-            ->join('device_esp as d', 'd.id_esp', '=', 'ds.id_esp')
-            ->select('ds.id_sensor', 'ds.name_sensor')
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('ds.id_esp', $this->selectedDevice);
-            })
-            ->when($this->selectedLoc !== '', function ($query) {
-                $query->where('d.loc_esp', $this->selectedLoc);
-            })
-            ->distinct()
-            ->orderBy('ds.name_sensor')
-            ->orderBy('ds.id_sensor')
-            ->get();
-    }
-
-    public function getActOptions()
-    {
-        return DB::table('device_act as da')
-            ->join('device_esp as d', 'd.id_esp', '=', 'da.id_esp')
-            ->select('da.id_act', 'da.name_act')
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('da.id_esp', $this->selectedDevice);
-            })
-            ->when($this->selectedLoc !== '', function ($query) {
-                $query->where('d.loc_esp', $this->selectedLoc);
-            })
-            ->distinct()
-            ->orderBy('da.name_act')
-            ->orderBy('da.id_act')
             ->get();
     }
 
@@ -125,14 +29,28 @@ new class extends Component
     public function getDeviceEspRows()
     {
         $latestStatus = DB::table('status_news')
-            ->select('id_esp', DB::raw('MAX(id) as latest_id'))
-            ->groupBy('id_esp');
+            ->select('id_device', DB::raw('MAX(id) as latest_id'))
+            ->groupBy('id_device');
+
+        $sensorCount = DB::table('device_sensor')
+            ->select('id_device', DB::raw('COUNT(DISTINCT id_sensor) as total_sensor'))
+            ->groupBy('id_device');
+
+        $actCount = DB::table('device_act')
+            ->select('id_device', DB::raw('COUNT(DISTINCT id_act) as total_act'))
+            ->groupBy('id_device');
 
         return DB::table('device_esp as d')
             ->leftJoinSub($latestStatus, 'ls', function ($join) {
-                $join->on('ls.id_esp', '=', 'd.id_esp');
+                $join->on('d.id', '=', 'ls.id_device');
             })
-            ->leftJoin('status_news as sn', 'sn.id', '=', 'ls.latest_id')
+            ->leftJoin('status_news as s', 's.id', '=', 'ls.latest_id')
+            ->leftJoinSub($sensorCount, 'sc', function ($join) {
+                $join->on('d.id', '=', 'sc.id_device');
+            })
+            ->leftJoinSub($actCount, 'ac', function ($join) {
+                $join->on('d.id', '=', 'ac.id_device');
+            })
             ->select(
                 'd.id',
                 'd.id_esp',
@@ -140,148 +58,57 @@ new class extends Component
                 'd.mac_esp',
                 'd.ip_esp',
                 'd.loc_esp',
-                'd.timestamp as device_timestamp',
-                'sn.status_esp',
-                'sn.news_esp',
-                'sn.timestamp as status_timestamp'
+                'd.log_time',
+                's.status_device',
+                's.news_device',
+                's.timestamp as status_time',
+                DB::raw('COALESCE(sc.total_sensor, 0) as total_sensor'),
+                DB::raw('COALESCE(ac.total_act, 0) as total_act')
             )
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('d.id_esp', $this->selectedDevice);
-            })
-            ->when($this->selectedSensor !== '', function ($query) {
-                $query->whereExists(function ($sub) {
-                    $sub->select(DB::raw(1))
-                        ->from('device_sensor as ds')
-                        ->whereColumn('ds.id_esp', 'd.id_esp')
-                        ->where('ds.id_sensor', $this->selectedSensor);
-                });
-            })
-            ->when($this->selectedAct !== '', function ($query) {
-                $query->whereExists(function ($sub) {
-                    $sub->select(DB::raw(1))
-                        ->from('device_act as da')
-                        ->whereColumn('da.id_esp', 'd.id_esp')
-                        ->where('da.id_act', $this->selectedAct);
-                });
-            })
             ->when($this->selectedLoc !== '', function ($query) {
                 $query->where('d.loc_esp', $this->selectedLoc);
             })
             ->when($this->search !== '', function ($query) {
-                $search = '%' . $this->search . '%';
-
-                $query->where(function ($q) use ($search) {
-                    $q->where('d.id_esp', 'like', $search)
-                        ->orWhere('d.name_esp', 'like', $search)
-                        ->orWhere('d.mac_esp', 'like', $search)
-                        ->orWhere('d.ip_esp', 'like', $search)
-                        ->orWhere('d.loc_esp', 'like', $search)
-                        ->orWhere('sn.status_esp', 'like', $search)
-                        ->orWhere('sn.news_esp', 'like', $search)
-                        ->orWhereExists(function ($sub) use ($search) {
-                            $sub->select(DB::raw(1))
-                                ->from('device_sensor as ds')
-                                ->whereColumn('ds.id_esp', 'd.id_esp')
-                                ->where(function ($sensorQ) use ($search) {
-                                    $sensorQ->where('ds.id_sensor', 'like', $search)
-                                        ->orWhere('ds.name_sensor', 'like', $search);
-                                });
-                        })
-                        ->orWhereExists(function ($sub) use ($search) {
-                            $sub->select(DB::raw(1))
-                                ->from('device_act as da')
-                                ->whereColumn('da.id_esp', 'd.id_esp')
-                                ->where(function ($actQ) use ($search) {
-                                    $actQ->where('da.id_act', 'like', $search)
-                                        ->orWhere('da.name_act', 'like', $search);
-                                });
-                        });
+                $query->where(function ($q) {
+                    $q->where('d.id_esp', 'like', '%' . $this->search . '%')
+                        ->orWhere('d.name_esp', 'like', '%' . $this->search . '%')
+                        ->orWhere('d.mac_esp', 'like', '%' . $this->search . '%')
+                        ->orWhere('d.ip_esp', 'like', '%' . $this->search . '%')
+                        ->orWhere('d.loc_esp', 'like', '%' . $this->search . '%');
                 });
             })
             ->orderBy('d.name_esp')
-            ->paginate((int) $this->devicePerPage, ['*'], 'devicePage');
+            ->get();
     }
 
     public function getSensors()
     {
-        return DB::table('device_sensor as ds')
-            ->join('device_esp as d', 'd.id_esp', '=', 'ds.id_esp')
-            ->select('ds.*', 'd.name_esp', 'd.loc_esp')
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('ds.id_esp', $this->selectedDevice);
+        return DB::table('device_sensor as s')
+            ->join('device_esp as d', 'd.id', '=', 's.id_device')
+            ->when($this->selectedDevice !== '', function ($q) {
+                $q->where('s.id_device', $this->selectedDevice);
             })
-            ->when($this->selectedSensor !== '', function ($query) {
-                $query->where('ds.id_sensor', $this->selectedSensor);
-            })
-            ->when($this->selectedAct !== '', function ($query) {
-                $query->whereExists(function ($sub) {
-                    $sub->select(DB::raw(1))
-                        ->from('device_act as da')
-                        ->whereColumn('da.id_esp', 'ds.id_esp')
-                        ->where('da.id_act', $this->selectedAct);
-                });
-            })
-            ->when($this->selectedLoc !== '', function ($query) {
-                $query->where('d.loc_esp', $this->selectedLoc);
-            })
-            ->when($this->search !== '', function ($query) {
-                $search = '%' . $this->search . '%';
-
-                $query->where(function ($q) use ($search) {
-                    $q->where('ds.id_sensor', 'like', $search)
-                        ->orWhere('ds.name_sensor', 'like', $search)
-                        ->orWhere('ds.id_esp', 'like', $search)
-                        ->orWhere('d.name_esp', 'like', $search)
-                        ->orWhere('d.loc_esp', 'like', $search);
-                });
-            })
-            ->orderByDesc('ds.timestamp')
-            ->paginate((int) $this->sensorPerPage, ['*'], 'sensorPage');
+            ->orderByDesc('s.timestamp')
+            ->select('s.*', 'd.name_esp')
+            ->get();
     }
 
     public function getActs()
     {
-        return DB::table('device_act as da')
-            ->join('device_esp as d', 'd.id_esp', '=', 'da.id_esp')
-            ->select('da.*', 'd.name_esp', 'd.loc_esp')
-            ->when($this->selectedDevice !== '', function ($query) {
-                $query->where('da.id_esp', $this->selectedDevice);
+        return DB::table('device_act as a')
+            ->join('device_esp as d', 'd.id', '=', 'a.id_device')
+            ->when($this->selectedDevice !== '', function ($q) {
+                $q->where('a.id_device', $this->selectedDevice);
             })
-            ->when($this->selectedSensor !== '', function ($query) {
-                $query->whereExists(function ($sub) {
-                    $sub->select(DB::raw(1))
-                        ->from('device_sensor as ds')
-                        ->whereColumn('ds.id_esp', 'da.id_esp')
-                        ->where('ds.id_sensor', $this->selectedSensor);
-                });
-            })
-            ->when($this->selectedAct !== '', function ($query) {
-                $query->where('da.id_act', $this->selectedAct);
-            })
-            ->when($this->selectedLoc !== '', function ($query) {
-                $query->where('d.loc_esp', $this->selectedLoc);
-            })
-            ->when($this->search !== '', function ($query) {
-                $search = '%' . $this->search . '%';
-
-                $query->where(function ($q) use ($search) {
-                    $q->where('da.id_act', 'like', $search)
-                        ->orWhere('da.name_act', 'like', $search)
-                        ->orWhere('da.id_esp', 'like', $search)
-                        ->orWhere('d.name_esp', 'like', $search)
-                        ->orWhere('d.loc_esp', 'like', $search);
-                });
-            })
-            ->orderByDesc('da.timestamp')
-            ->paginate((int) $this->actPerPage, ['*'], 'actPage');
+            ->orderByDesc('a.timestamp')
+            ->select('a.*', 'd.name_esp')
+            ->get();
     }
 
     public function render()
     {
         return $this->view([
             'deviceOptions' => $this->getDeviceOptions(),
-            'sensorOptions' => $this->getSensorOptions(),
-            'actOptions'    => $this->getActOptions(),
             'locations'     => $this->getLocations(),
             'deviceRows'    => $this->getDeviceEspRows(),
             'sensors'       => $this->getSensors(),
@@ -295,68 +122,23 @@ new class extends Component
 
     {{-- FILTER UTAMA --}}
     <x-card title="Database | Filter Data" shadow separator>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             <div>
                 <label class="text-sm font-semibold mb-2 block">
-                    Search
+                    Cari Device ESP
                 </label>
                 <input
                     type="text"
                     wire:model.live.debounce.500ms="search"
-                    placeholder="Cari device, sensor, actuator, ID, MAC, IP, atau lokasi..."
+                    placeholder="Cari ID ESP, nama, MAC, IP, lokasi..."
                     class="input input-bordered w-full"
                 >
             </div>
 
             <div>
                 <label class="text-sm font-semibold mb-2 block">
-                    List Device
-                </label>
-                <select wire:model.live="selectedDevice" class="select select-bordered w-full">
-                    <option value="">Semua Device</option>
-
-                    @foreach ($deviceOptions as $dev)
-                        <option value="{{ $dev->id_esp }}">
-                            {{ $dev->name_esp }} - {{ $dev->id_esp }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-
-            <div>
-                <label class="text-sm font-semibold mb-2 block">
-                    List Sensor
-                </label>
-                <select wire:model.live="selectedSensor" class="select select-bordered w-full">
-                    <option value="">Semua Sensor</option>
-
-                    @foreach ($sensorOptions as $sensorOption)
-                        <option value="{{ $sensorOption->id_sensor }}">
-                            {{ $sensorOption->name_sensor }} - {{ $sensorOption->id_sensor }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-
-            <div>
-                <label class="text-sm font-semibold mb-2 block">
-                    List Actuator
-                </label>
-                <select wire:model.live="selectedAct" class="select select-bordered w-full">
-                    <option value="">Semua Actuator</option>
-
-                    @foreach ($actOptions as $actOption)
-                        <option value="{{ $actOption->id_act }}">
-                            {{ $actOption->name_act }} - {{ $actOption->id_act }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-
-            <div>
-                <label class="text-sm font-semibold mb-2 block">
-                    List Location
+                    Lokasi
                 </label>
                 <select wire:model.live="selectedLoc" class="select select-bordered w-full">
                     <option value="">Semua Lokasi</option>
@@ -369,25 +151,27 @@ new class extends Component
                 </select>
             </div>
 
+            <div>
+                <label class="text-sm font-semibold mb-2 block">
+                    Device Sensor / Actuator
+                </label>
+                <select wire:model.live="selectedDevice" class="select select-bordered w-full">
+                    <option value="">Semua Device</option>
+
+                    @foreach ($deviceOptions as $dev)
+                        <option value="{{ $dev->id }}">
+                            {{ $dev->name_esp }} - {{ $dev->id_esp }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
         </div>
     </x-card>
 
 
     {{-- DEVICE ESP --}}
     <x-card title="Database | Device ESP" shadow separator>
-
-        <div class="flex justify-end mb-4">
-            <div class="w-full md:w-40">
-                <label class="text-sm font-semibold mb-2 block">
-                    Baris Table
-                </label>
-                <select wire:model.live="devicePerPage" class="select select-bordered w-full">
-                    <option value="10">10</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-            </div>
-        </div>
 
         <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
             <table class="table table-zebra table-sm">
@@ -399,9 +183,11 @@ new class extends Component
                         <th>MAC Address</th>
                         <th>IP Address</th>
                         <th>Lokasi</th>
+                        <th>Sensor</th>
+                        <th>Actuator</th>
                         <th>Status</th>
                         <th>News</th>
-                        <th>Timestamp</th>
+                        <th>Log Time</th>
                     </tr>
                 </thead>
 
@@ -409,7 +195,7 @@ new class extends Component
                     @forelse ($deviceRows as $index => $device)
                         <tr>
                             <td class="font-semibold">
-                                {{ ($deviceRows->firstItem() ?? 1) + $index }}
+                                {{ $index + 1 }}
                             </td>
 
                             <td>
@@ -440,15 +226,21 @@ new class extends Component
                             </td>
 
                             <td>
-                                @php
-                                    $isOnline = $device->status_timestamp
-                                        ? \Illuminate\Support\Carbon::parse($device->status_timestamp)->gte(now()->subSeconds(10))
-                                        : false;
-                                @endphp
+                                <span class="badge badge-info badge-outline">
+                                    {{ $device->total_sensor }}
+                                </span>
+                            </td>
 
-                                @if ($device->status_timestamp)
-                                    <span class="badge {{ $isOnline ? 'badge-success' : 'badge-error' }}">
-                                        {{ $isOnline ? 'ONLINE' : 'OFFLINE' }}
+                            <td>
+                                <span class="badge badge-warning badge-outline">
+                                    {{ $device->total_act }}
+                                </span>
+                            </td>
+
+                            <td>
+                                @if ($device->status_device)
+                                    <span class="badge badge-success">
+                                        {{ $device->status_device }}
                                     </span>
                                 @else
                                     <span class="badge badge-ghost">
@@ -458,16 +250,16 @@ new class extends Component
                             </td>
 
                             <td class="min-w-56">
-                                {{ $device->news_esp ?? '-' }}
+                                {{ $device->news_device ?? '-' }}
                             </td>
 
                             <td class="whitespace-nowrap text-xs opacity-70">
-                                {{ $device->status_timestamp ?? $device->device_timestamp ?? '-' }}
+                                {{ $device->log_time ?? '-' }}
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="text-center py-8 opacity-60">
+                            <td colspan="11" class="text-center py-8 opacity-60">
                                 Data device ESP belum tersedia
                             </td>
                         </tr>
@@ -476,28 +268,11 @@ new class extends Component
             </table>
         </div>
 
-        <div class="mt-4">
-            {{ $deviceRows->links() }}
-        </div>
-
     </x-card>
 
 
     {{-- DEVICE SENSOR --}}
     <x-card title="Database | Device Sensor" shadow separator>
-
-        <div class="flex justify-end mb-4">
-            <div class="w-full md:w-40">
-                <label class="text-sm font-semibold mb-2 block">
-                    Baris Table
-                </label>
-                <select wire:model.live="sensorPerPage" class="select select-bordered w-full">
-                    <option value="10">10</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-            </div>
-        </div>
 
         <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
             <table class="table table-zebra table-sm">
@@ -505,7 +280,6 @@ new class extends Component
                     <tr>
                         <th>No</th>
                         <th>Device</th>
-                        <th>Lokasi</th>
                         <th>Sensor</th>
                         <th>ID Sensor</th>
                         <th>Voltage (A)</th>
@@ -523,14 +297,10 @@ new class extends Component
                 <tbody>
                     @forelse ($sensors as $i => $sensor)
                         <tr>
-                            <td>{{ ($sensors->firstItem() ?? 1) + $i }}</td>
+                            <td>{{ $i + 1 }}</td>
 
                             <td class="font-bold">
                                 {{ $sensor->name_esp }}
-                            </td>
-
-                            <td>
-                                {{ $sensor->loc_esp }}
                             </td>
 
                             <td>
@@ -550,7 +320,7 @@ new class extends Component
                             <td>{{ $sensor->val_E ?? '-' }}</td>
                             <td>{{ $sensor->val_F ?? '-' }}</td>
                             <td>{{ $sensor->val_G ?? '-' }}</td>
-                            <td>{{ $sensor->val_H ?? '-' }}</td>
+                            <td>{{ $sensor->val_h ?? '-' }}</td>
 
                             <td class="whitespace-nowrap text-xs opacity-70">
                                 {{ $sensor->timestamp }}
@@ -558,7 +328,7 @@ new class extends Component
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="14" class="text-center py-6 opacity-60">
+                            <td colspan="13" class="text-center py-6 opacity-60">
                                 Tidak ada data sensor
                             </td>
                         </tr>
@@ -567,28 +337,11 @@ new class extends Component
             </table>
         </div>
 
-        <div class="mt-4">
-            {{ $sensors->links() }}
-        </div>
-
     </x-card>
 
 
     {{-- DEVICE ACTUATOR --}}
     <x-card title="Database | Device Actuator" shadow separator>
-
-        <div class="flex justify-end mb-4">
-            <div class="w-full md:w-40">
-                <label class="text-sm font-semibold mb-2 block">
-                    Baris Table
-                </label>
-                <select wire:model.live="actPerPage" class="select select-bordered w-full">
-                    <option value="10">10</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-            </div>
-        </div>
 
         <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
             <table class="table table-zebra table-sm">
@@ -596,7 +349,6 @@ new class extends Component
                     <tr>
                         <th>No</th>
                         <th>Device</th>
-                        <th>Lokasi</th>
                         <th>Actuator</th>
                         <th>ID Act</th>
                         <th>Status (A)</th>
@@ -610,14 +362,10 @@ new class extends Component
                 <tbody>
                     @forelse ($acts as $i => $act)
                         <tr>
-                            <td>{{ ($acts->firstItem() ?? 1) + $i }}</td>
+                            <td>{{ $i + 1 }}</td>
 
                             <td class="font-bold">
                                 {{ $act->name_esp }}
-                            </td>
-
-                            <td>
-                                {{ $act->loc_esp }}
                             </td>
 
                             <td>
@@ -648,17 +396,13 @@ new class extends Component
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center py-6 opacity-60">
+                            <td colspan="9" class="text-center py-6 opacity-60">
                                 Tidak ada data actuator
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
-        </div>
-
-        <div class="mt-4">
-            {{ $acts->links() }}
         </div>
 
     </x-card>
