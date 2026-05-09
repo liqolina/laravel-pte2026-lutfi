@@ -1,20 +1,18 @@
 <?php
 
+use App\Imports\FullDeviceCsvImport;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithFileUploads;
-use Illuminate\Support\Facades\DB;
 
 new class extends Component
 {
     use WithFileUploads;
 
     public string $selectedDevice = '';
-    public string $exportType = 'sensor';
+    public string $exportType = 'full';
     public $file;
 
-    /* =========================
-        DEVICE LIST
-    ========================== */
     public function getDevices()
     {
         return DB::table('device_esp')
@@ -22,98 +20,48 @@ new class extends Component
             ->get();
     }
 
-    /* =========================
-        EXPORT CSV
-    ========================== */
+    protected function exportParams(): array
+    {
+        return array_filter([
+            'device' => $this->selectedDevice,
+        ], fn ($value) => $value !== '');
+    }
+
     public function exportCsv()
     {
-        return match ($this->exportType) {
-            'esp'    => redirect()->route('export-import.device-esp.csv'),
-            'sensor' => redirect()->route('export-import.device-sensor.csv'),
-            'act'    => redirect()->route('export-import.device-act.csv'),
-            default  => redirect()->route('export-import.full.csv'),
+        $route = match ($this->exportType) {
+            'esp'    => 'export-import.device-esp.csv',
+            'sensor' => 'export-import.device-sensor.csv',
+            'act'    => 'export-import.device-act.csv',
+            default  => 'export-import.full.csv',
         };
+
+        return $this->redirectRoute($route, $this->exportParams());
     }
 
-    /* =========================
-        EXPORT PDF
-    ========================== */
     public function exportPdf()
     {
-        return match ($this->exportType) {
-            'esp'    => redirect()->route('export-import.device-esp.pdf'),
-            'sensor' => redirect()->route('export-import.device-sensor.pdf'),
-            'act'    => redirect()->route('export-import.device-act.pdf'),
-            default  => redirect()->route('export-import.full.pdf'),
+        $route = match ($this->exportType) {
+            'esp'    => 'export-import.device-esp.pdf',
+            'sensor' => 'export-import.device-sensor.pdf',
+            'act'    => 'export-import.device-act.pdf',
+            default  => 'export-import.full.pdf',
         };
+
+        return $this->redirectRoute($route, $this->exportParams());
     }
 
-    /* =========================
-        IMPORT FULL CSV
-    ========================== */
     public function importCsv()
     {
         $this->validate([
             'file' => 'required|file|mimes:csv,txt',
         ]);
 
-        $path = $this->file->getRealPath();
-        $handle = fopen($path, 'r');
+        app(FullDeviceCsvImport::class)->import($this->file->getRealPath());
 
-        DB::transaction(function () use ($handle) {
+        $this->reset('file');
 
-            $table = null;
-            $header = [];
-            $isHeader = false;
-
-            while (($row = fgetcsv($handle)) !== false) {
-
-                // 🔥 FIX: skip empty row
-                if (!$row || count(array_filter($row)) == 0) {
-                    continue;
-                }
-
-                // 🔥 FIX: remove BOM karakter
-                $row[0] = preg_replace('/^\xEF\xBB\xBF/', '', $row[0]);
-
-                // TABLE DETECT
-                if ($row[0] === '#TABLE') {
-                    $table = $row[1] ?? null;
-                    $isHeader = true;
-                    continue;
-                }
-
-                // HEADER
-                if ($isHeader) {
-                    $header = $row;
-                    $isHeader = false;
-                    continue;
-                }
-
-                // DATA
-                if ($table && $header) {
-
-                    $data = array_combine($header, $row);
-
-                    if (!$data || !isset($data['id'])) {
-                        continue;
-                    }
-
-                    foreach ($data as $k => $v) {
-                        $data[$k] = ($v === '' ? null : $v);
-                    }
-
-                    DB::table($table)->updateOrInsert(
-                        ['id' => $data['id']],
-                        $data
-                    );
-                }
-            }
-
-            fclose($handle);
-        });
-
-        session()->flash('success', 'Import berhasil (FIXED VERSION)');
+        session()->flash('success', 'Import CSV gabungan berhasil.');
     }
 
     public function render()
@@ -126,7 +74,6 @@ new class extends Component
 ?>
 
 <div class="max-w-2xl mx-auto p-6">
-
     <x-card title="Export & Import Device Data" shadow separator>
 
         {{-- DEVICE FILTER --}}
@@ -135,9 +82,7 @@ new class extends Component
                 Filter Device
             </label>
 
-            <select wire:model="selectedDevice"
-                class="select select-bordered w-full">
-
+            <select wire:model="selectedDevice" class="select select-bordered w-full">
                 <option value="">Semua Device</option>
 
                 @foreach ($devices as $dev)
@@ -145,7 +90,6 @@ new class extends Component
                         {{ $dev->name_esp }} ({{ $dev->id_esp }})
                     </option>
                 @endforeach
-
             </select>
         </div>
 
@@ -155,40 +99,36 @@ new class extends Component
                 Data Type
             </label>
 
-            <select wire:model="exportType"
-                class="select select-bordered w-full">
-
+            <select wire:model="exportType" class="select select-bordered w-full">
                 <option value="esp">Device ESP</option>
                 <option value="sensor">Device Sensor</option>
                 <option value="act">Device Actuator</option>
                 <option value="full">Full Export</option>
-
             </select>
         </div>
 
         {{-- ACTION BUTTONS --}}
         <div class="flex gap-3 mb-6">
-
-            <button class="btn btn-primary flex-1">
+            <button type="button" wire:click="exportCsv" class="btn btn-primary flex-1">
                 Export CSV
             </button>
 
-            <button class="btn btn-neutral flex-1">
+            <button type="button" wire:click="exportPdf" class="btn btn-neutral flex-1">
                 Export PDF
             </button>
-
         </div>
 
         {{-- IMPORT --}}
         <div class="border-t pt-5">
-
             <h3 class="font-semibold mb-3">
                 Import FULL CSV
             </h3>
 
-            <input type="file"
+            <input
+                type="file"
                 wire:model="file"
-                class="file-input file-input-bordered w-full">
+                class="file-input file-input-bordered w-full"
+            >
 
             @error('file')
                 <div class="text-red-500 text-sm mt-1">
@@ -196,9 +136,11 @@ new class extends Component
                 </div>
             @enderror
 
-            <button wire:click="importCsv"
-                class="btn btn-warning w-full mt-3">
-
+            <button
+                type="button"
+                wire:click="importCsv"
+                class="btn btn-warning w-full mt-3"
+            >
                 Import CSV
             </button>
 
@@ -207,9 +149,7 @@ new class extends Component
                     {{ session('success') }}
                 </div>
             @endif
-
         </div>
 
     </x-card>
-
 </div>

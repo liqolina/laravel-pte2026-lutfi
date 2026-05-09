@@ -57,6 +57,22 @@ services:
             - "3311:3306" # Port default internal
     # -----------------------------------------------
 
+    mqtt_sub:
+        image: eclipse-mosquitto
+        container_name: mqtt_sub
+        ports:
+        - "1883:1883"
+        networks:
+        - WebFPTE
+
+    mqtt_pub:
+        image: eclipse-mosquitto
+        container_name: mqtt_pub
+        ports:
+        - "1884:1883"
+        networks:
+        - WebFPTE
+
     redis:
         image: redis:alpine
         container_name: webdev-redis

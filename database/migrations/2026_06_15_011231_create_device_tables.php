@@ -48,8 +48,6 @@ return new class extends Migration
             $table->decimal('val_D', 8, 2)->nullable();
             $table->timestamp('timestamp')->nullable();
         });
-<<<<<<< HEAD
-=======
 
         Schema::create('status_news', function (Blueprint $table) {
             $table->id();
@@ -58,7 +56,6 @@ return new class extends Migration
             $table->string('news_device');
             $table->timestamp('timestamp')->nullable();
         });
->>>>>>> 4a671bb (Pembaruan kode)
     }
 
     /**
@@ -66,6 +63,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('status_news');
         Schema::dropIfExists('device_act');
         Schema::dropIfExists('device_sensor');
         Schema::dropIfExists('device_esp');

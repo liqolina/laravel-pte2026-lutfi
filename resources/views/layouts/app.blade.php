@@ -143,7 +143,7 @@
                                 <x-menu-item 
                                     title="Add Hardware" 
                                     icon="o-plus-circle" 
-                                    link="/admin/hardware/create" 
+                                    link="/addHardware" 
                                 />
 
                                 <x-menu-item 
