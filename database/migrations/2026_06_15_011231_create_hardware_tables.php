@@ -3,47 +3,54 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('hardware_esp', function (Blueprint $table) {
             $table->id();
-            $table->string('id_esp');
-            $table->string('name_esp');
-            $table->string('topic_publish');
-            $table->string('topic_subcribe');
-            $table->timestamp('timestamp')->nullable();
-        });
-
-        Schema::create('subcriber_mqtt', function (Blueprint $table) {
-            $table->id();
-            $table->string('id_esp');
-            $table->string('topic_subcribe');
-            $table->string('message');
-            $table->timestamp('timestamp')->nullable();
+            $table->string('id_esp')->unique();
+            $table->string('name_esp')->nullable();
+            $table->string('topic_publish')->nullable()->index();
+            $table->string('topic_subscribe')->nullable()->index();
+            $table->timestamp('timestamp')->useCurrent();
         });
 
         Schema::create('publish_mqtt', function (Blueprint $table) {
             $table->id();
             $table->string('id_esp');
-            $table->string('topic_publish');
-            $table->string('message');
-            $table->timestamp('timestamp')->nullable();
+            $table->string('topic_publish')->nullable()->index();
+            $table->longText('message');
+            $table->timestamp('timestamp')->useCurrent();
+
+            $table->foreign('id_esp')
+                ->references('id_esp')
+                ->on('hardware_esp')
+                ->cascadeOnUpdate()
+                ->cascadeOnDelete();
+        });
+
+        Schema::create('subscriber_mqtt', function (Blueprint $table) {
+            $table->id();
+            $table->string('id_esp')->nullable()->index();
+            $table->string('topic_subscribe')->index();
+            $table->longText('message');
+            $table->timestamp('timestamp')->useCurrent();
+
+            $table->foreign('id_esp')
+                ->references('id_esp')
+                ->on('hardware_esp')
+                ->cascadeOnUpdate()
+                ->nullOnDelete();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
+        Schema::dropIfExists('subscriber_mqtt');
         Schema::dropIfExists('publish_mqtt');
-        Schema::dropIfExists('subcriber_mqtt');
         Schema::dropIfExists('hardware_esp');
     }
 };

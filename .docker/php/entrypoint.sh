@@ -17,6 +17,15 @@ if [ ! -z "$WWWUSER" ] && [ ! -z "$WWWGROUP" ]; then
     groupmod -g "$WWWGROUP" www-data
 fi
 
+echo "Waiting mysql..."
+until nc -z mysql 3306; do
+  sleep 2
+done
+
+echo "Running migrate..."
+php artisan migrate --force || true
+php artisan migrate --seed
+
 echo "Switching to www-data user..."
 if command -v gosu > /dev/null; then
     exec gosu www-data "$@"

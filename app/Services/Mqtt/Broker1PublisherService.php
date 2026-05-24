@@ -11,10 +11,10 @@ class Broker1PublisherService
     public function flush(int $limit = 100): int
     {
         $rows = PublishMqtt::query()
-            ->join('hardware_esp', 'hardware_esp.id_device', '=', 'publish_mqtt.id_device')
+            ->join('hardware_esp', 'hardware_esp.id_esp', '=', 'publish_mqtt.id_esp')
             ->select([
                 'publish_mqtt.id',
-                'publish_mqtt.id_device',
+                'publish_mqtt.id_esp',
                 'publish_mqtt.message',
                 'hardware_esp.topic_publish as resolved_topic',
             ])

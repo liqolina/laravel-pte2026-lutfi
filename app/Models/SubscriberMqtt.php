@@ -8,9 +8,15 @@ class SubscriberMqtt extends Model
 {
     protected $table = 'subscriber_mqtt';
 
+    public $timestamps = false;
+
     protected $fillable = [
         'id_esp',
         'topic_subscribe',
         'message',
+    ];
+
+    protected $casts = [
+        'timestamp' => 'datetime',
     ];
 }

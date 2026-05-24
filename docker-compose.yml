@@ -47,31 +47,16 @@ services:
             MYSQL_ROOT_HOST: "%"
             MYSQL_DATABASE: ${DB_DATABASE}
             # Jika user di .env bukan root, baris di bawah ini akan membuat user baru
-            # MYSQL_USER: ${DB_USERNAME}
-            # MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
         volumes:
             - mysql_data:/var/lib/mysql
+            - ./mysql/init:/docker-entrypoint-initdb.d
         networks:
             - WebFPTE
         ports:
             - "3311:3306" # Port default internal
     # -----------------------------------------------
-
-    mqtt_sub:
-        image: eclipse-mosquitto
-        container_name: mqtt_sub
-        ports:
-        - "1883:1883"
-        networks:
-        - WebFPTE
-
-    mqtt_pub:
-        image: eclipse-mosquitto
-        container_name: mqtt_pub
-        ports:
-        - "1884:1883"
-        networks:
-        - WebFPTE
 
     redis:
         image: redis:alpine
@@ -82,9 +67,39 @@ services:
         networks:
             - WebFPTE
 
+    # mosquitto1:
+    #     image: eclipse-mosquitto:2
+    #     container_name: webdev-mosquitto1
+    #     restart: always
+    #     ports:
+    #         - "1883:1883"
+    #     volumes:
+    #         - .docker/mosquitto1/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    #         - mosquitto1_data:/mosquitto/data
+    #         - mosquitto1_log:/mosquitto/log
+    #     networks:
+    #         - WebFPTE
+
+    # mosquitto2:
+    #     image: eclipse-mosquitto:2
+    #     container_name: webdev-mosquitto2
+    #     restart: always
+    #     ports:
+    #         - "1884:1883"
+    #     volumes:
+    #         - .docker/mosquitto2/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    #         - mosquitto2_data:/mosquitto/data
+    #         - mosquitto2_log:/mosquitto/log
+    #     networks:
+    #         - WebFPTE
+
 volumes:
     mysql_data: # <--- UBAH DARI pg_data KE mysql_data
     redis_data:
+    # mosquitto1_data:
+    # mosquitto1_log:
+    # mosquitto2_data:
+    # mosquitto2_log:
 
 networks:
     WebFPTE:
