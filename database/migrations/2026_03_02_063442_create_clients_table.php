@@ -6,27 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('atj_clients', function (Blueprint $table) {
             $table->id();
-            $table->integer('user_id');
-            $table->string('code')
-                ->unique();
-            $table->string('name');
-            $table->date('expirity');
+
+            $table->foreignId('user_id')
+                ->constrained('users')
+                ->cascadeOnDelete();
+
+            $table->string('login_identifier')->unique();
+            $table->enum('role', ['admin', 'client'])->default('client');
+            $table->date('expired_at')->nullable();
+
             $table->timestamps();
+
+            $table->unique('user_id');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('clients');
+        Schema::dropIfExists('atj_clients');
     }
 };

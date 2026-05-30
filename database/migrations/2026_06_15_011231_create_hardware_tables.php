@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('name_esp')->nullable();
             $table->string('topic_publish')->nullable()->index();
             $table->string('topic_subscribe')->nullable()->index();
-            $table->timestamp('timestamp')->useCurrent();
+            $table->timestamps();
         });
 
         Schema::create('publish_mqtt', function (Blueprint $table) {
@@ -23,7 +23,7 @@ return new class extends Migration
             $table->string('id_esp');
             $table->string('topic_publish')->nullable()->index();
             $table->longText('message');
-            $table->timestamp('timestamp')->useCurrent();
+            $table->timestamps();
 
             $table->foreign('id_esp')
                 ->references('id_esp')
@@ -37,13 +37,13 @@ return new class extends Migration
             $table->string('id_esp')->nullable()->index();
             $table->string('topic_subscribe')->index();
             $table->longText('message');
-            $table->timestamp('timestamp')->useCurrent();
+            $table->timestamps();
 
             $table->foreign('id_esp')
                 ->references('id_esp')
                 ->on('hardware_esp')
                 ->cascadeOnUpdate()
-                ->nullOnDelete();
+                ->cascadeOnDelete();
         });
     }
 

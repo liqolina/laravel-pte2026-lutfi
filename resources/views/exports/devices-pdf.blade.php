@@ -15,6 +15,7 @@
             border: 1px solid #000;
             padding: 5px;
             text-align: left;
+            vertical-align: top;
         }
         th {
             background: #f2f2f2;
@@ -22,6 +23,10 @@
         .table-title {
             margin-top: 15px;
             font-weight: bold;
+        }
+        .empty-text {
+            margin: 8px 0 14px;
+            color: #666;
         }
     </style>
 </head>
@@ -35,25 +40,33 @@
         {{ strtoupper(str_replace('_', ' ', $tableName)) }}
     </div>
 
-    <table>
-        <thead>
-        <tr>
-            @foreach(($columns[$tableName] ?? array_keys((array)$rows->first())) as $col)
-                <th>{{ $col }}</th>
-            @endforeach
-        </tr>
-        </thead>
+    @php
+        $tableColumns = $columns[$tableName] ?? [];
+    @endphp
 
-        <tbody>
-        @foreach($rows as $row)
+    @if(($rows instanceof \Illuminate\Support\Collection && $rows->isEmpty()) || (is_array($rows) && count($rows) === 0))
+        <div class="empty-text">Tidak ada data.</div>
+    @else
+        <table>
+            <thead>
             <tr>
-                @foreach(($columns[$tableName] ?? array_keys((array)$row)) as $col)
-                    <td>{{ data_get($row, $col) }}</td>
+                @foreach($tableColumns ?: array_keys((array) $rows->first()) as $col)
+                    <th>{{ $col }}</th>
                 @endforeach
             </tr>
-        @endforeach
-        </tbody>
-    </table>
+            </thead>
+
+            <tbody>
+            @foreach($rows as $row)
+                <tr>
+                    @foreach($tableColumns ?: array_keys((array) $row) as $col)
+                        <td>{{ data_get($row, $col) }}</td>
+                    @endforeach
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    @endif
 
 @endforeach
 

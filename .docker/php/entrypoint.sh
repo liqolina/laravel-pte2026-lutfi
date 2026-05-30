@@ -12,7 +12,7 @@ chmod -R 777 /var/www/storage /var/www/bootstrap/cache
 
 if [ ! -z "$WWWUSER" ] && [ ! -z "$WWWGROUP" ]; then
     echo "Updating www-data UID/GID to $WWWUSER:$WWWGROUP..."
-    apk add --no-cache shadow
+    # apk add --no-cache shadow
     usermod -u "$WWWUSER" www-data
     groupmod -g "$WWWGROUP" www-data
 fi
@@ -23,7 +23,7 @@ until nc -z mysql 3306; do
 done
 
 echo "Running migrate..."
-php artisan migrate --force || true
+php artisan migrate --force
 php artisan migrate --seed
 
 echo "Switching to www-data user..."

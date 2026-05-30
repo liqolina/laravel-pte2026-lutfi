@@ -12,10 +12,12 @@ return new class extends Migration
             $table->id();
             $table->string('id_esp')->unique();
             $table->string('name_esp');
+
             $table->macAddress('mac_esp')->unique();
             $table->ipAddress('ip_esp')->nullable();
             $table->string('loc_esp')->nullable();
-            $table->timestamp('log_time')->nullable();
+
+            $table->timestamp('timestamp')->nullable();
             $table->timestamps();
         });
 
@@ -43,7 +45,7 @@ return new class extends Migration
                 ->cascadeOnUpdate()
                 ->cascadeOnDelete();
 
-            $table->unique(['id_esp', 'id_sensor']);
+            $table->index(['id_esp', 'id_sensor']);
         });
 
         Schema::create('device_act', function (Blueprint $table) {
@@ -66,14 +68,14 @@ return new class extends Migration
                 ->cascadeOnUpdate()
                 ->cascadeOnDelete();
 
-            $table->unique(['id_esp', 'id_act']);
+            $table->index(['id_esp', 'id_act']);
         });
 
         Schema::create('status_news', function (Blueprint $table) {
             $table->id();
             $table->string('id_esp');
-            $table->string('status_device');
-            $table->text('news_device')->nullable();
+            $table->string('status_esp');
+            $table->string('news_esp')->nullable();
             $table->timestamp('timestamp')->nullable();
             $table->timestamps();
 
@@ -82,6 +84,8 @@ return new class extends Migration
                 ->on('device_esp')
                 ->cascadeOnUpdate()
                 ->cascadeOnDelete();
+
+            $table->index(['id_esp', 'timestamp']);
         });
     }
 
@@ -93,3 +97,5 @@ return new class extends Migration
         Schema::dropIfExists('device_esp');
     }
 };
+
+// kemudian untuk status ONLINE dan OFFLINE dengan cara membandingkan waktu 10 detik setelah waktu timestamp di database status_news

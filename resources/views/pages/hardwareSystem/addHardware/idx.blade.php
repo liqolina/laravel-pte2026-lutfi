@@ -8,55 +8,42 @@ new class extends Component
     public string $id_esp = '';
     public string $name_esp = '';
     public string $topic_publish = '';
-    public string $topic_subcribe = '';
+    public string $topic_subscribe = '';
 
     public function getHardware()
     {
         return DB::table('hardware_esp')
+            ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->get();
     }
 
     public function save()
     {
-        $this->validate([
-            'id_esp' => 'nullable|required_without:name_esp|string|max:255',
-            'name_esp' => 'nullable|required_without:id_esp|string|max:255',
-            'topic_publish' => 'required|string|max:255',
-            'topic_subcribe' => 'required|string|max:255',
+        $validated = $this->validate([
+            'id_esp' => 'required|string|max:255|unique:hardware_esp,id_esp',
+            'name_esp' => 'nullable|string|max:255',
+            'topic_publish' => 'nullable|string|max:255',
+            'topic_subscribe' => 'nullable|string|max:255',
         ], [
-            'id_esp.required_without' => 'ID ESP atau Name ESP wajib diisi salah satu.',
-            'name_esp.required_without' => 'Name ESP atau ID ESP wajib diisi salah satu.',
-            'topic_publish.required' => 'Topic publish wajib diisi.',
-            'topic_subcribe.required' => 'Topic subcribe wajib diisi.',
+            'id_esp.required' => 'ID ESP wajib diisi.',
+            'id_esp.unique' => 'ID ESP sudah terdaftar.',
         ]);
 
-        /*
-         * Karena migration hardware_esp membuat id_esp dan name_esp sebagai string wajib,
-         * maka jika salah satu kosong, nilainya otomatis diisi dari field yang satunya.
-         * Jadi database tidak perlu diubah.
-         */
-        $idEsp = trim($this->id_esp) !== ''
-            ? trim($this->id_esp)
-            : trim($this->name_esp);
-
-        $nameEsp = trim($this->name_esp) !== ''
-            ? trim($this->name_esp)
-            : trim($this->id_esp);
-
         DB::table('hardware_esp')->insert([
-            'id_esp' => $idEsp,
-            'name_esp' => $nameEsp,
-            'topic_publish' => trim($this->topic_publish),
-            'topic_subcribe' => trim($this->topic_subcribe),
-            'timestamp' => now(),
+            'id_esp' => trim($validated['id_esp']),
+            'name_esp' => trim((string) ($validated['name_esp'] ?? '')) ?: null,
+            'topic_publish' => trim((string) ($validated['topic_publish'] ?? '')) ?: null,
+            'topic_subscribe' => trim((string) ($validated['topic_subscribe'] ?? '')) ?: null,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $this->reset([
             'id_esp',
             'name_esp',
             'topic_publish',
-            'topic_subcribe',
+            'topic_subscribe',
         ]);
 
         session()->flash('success', 'Hardware ESP berhasil ditambahkan.');
@@ -80,20 +67,17 @@ new class extends Component
 };
 ?>
 
-<div class="max-w-6xl mx-auto p-6">
+<div>
     <x-card title="Tambah Hardware ESP" shadow separator>
 
-        {{-- ALERT SUCCESS --}}
         @if (session()->has('success'))
             <div class="alert alert-success mb-5">
                 {{ session('success') }}
             </div>
         @endif
 
-        {{-- FORM TAMBAH HARDWARE --}}
         <form wire:submit="save" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 
-            {{-- ID ESP --}}
             <div>
                 <label class="text-sm font-semibold block mb-2">
                     ID ESP
@@ -113,7 +97,6 @@ new class extends Component
                 @enderror
             </div>
 
-            {{-- NAME ESP --}}
             <div>
                 <label class="text-sm font-semibold block mb-2">
                     Name ESP
@@ -133,7 +116,6 @@ new class extends Component
                 @enderror
             </div>
 
-            {{-- TOPIC PUBLISH --}}
             <div>
                 <label class="text-sm font-semibold block mb-2">
                     Topic Publish
@@ -153,27 +135,25 @@ new class extends Component
                 @enderror
             </div>
 
-            {{-- TOPIC SUBCRIBE --}}
             <div>
                 <label class="text-sm font-semibold block mb-2">
-                    Topic Subcribe
+                    Topic Subscribe
                 </label>
 
                 <input
                     type="text"
-                    wire:model="topic_subcribe"
+                    wire:model="topic_subscribe"
                     class="input input-bordered w-full"
-                    placeholder="Contoh: device/esp001/subcribe"
+                    placeholder="Contoh: device/esp001/subscribe"
                 >
 
-                @error('topic_subcribe')
+                @error('topic_subscribe')
                     <div class="text-red-500 text-sm mt-1">
                         {{ $message }}
                     </div>
                 @enderror
             </div>
 
-            {{-- BUTTON --}}
             <div class="md:col-span-2 flex justify-end gap-3">
                 <button
                     type="button"
@@ -192,17 +172,16 @@ new class extends Component
             </div>
         </form>
 
-        {{-- TABLE DATA HARDWARE --}}
-        <div class="overflow-x-auto border rounded-lg">
-            <table class="table table-zebra w-full">
-                <thead>
+        <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
+            <table class="table table-zebra table-sm">
+                <thead class="bg-base-200">
                     <tr>
                         <th>No</th>
                         <th>ID ESP</th>
                         <th>Name ESP</th>
                         <th>Topic Publish</th>
-                        <th>Topic Subcribe</th>
-                        <th>Timestamp</th>
+                        <th>Topic Subscribe</th>
+                        <th>Updated At</th>
                         <th class="text-center">Aksi</th>
                     </tr>
                 </thead>
@@ -212,12 +191,10 @@ new class extends Component
                         <tr wire:key="hardware-{{ $hardware->id }}">
                             <td>{{ $index + 1 }}</td>
                             <td>{{ $hardware->id_esp }}</td>
-                            <td>{{ $hardware->name_esp }}</td>
-                            <td>{{ $hardware->topic_publish }}</td>
-                            <td>{{ $hardware->topic_subcribe }}</td>
-                            <td>
-                                {{ $hardware->timestamp ?? '-' }}
-                            </td>
+                            <td>{{ $hardware->name_esp ?? '-' }}</td>
+                            <td>{{ $hardware->topic_publish ?? '-' }}</td>
+                            <td>{{ $hardware->topic_subscribe ?? '-' }}</td>
+                            <td>{{ $hardware->updated_at ?? '-' }}</td>
                             <td class="text-center">
                                 <button
                                     type="button"

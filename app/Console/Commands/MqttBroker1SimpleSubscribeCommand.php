@@ -25,7 +25,6 @@ class MqttBroker1SimpleSubscribeCommand extends Command
             ]);
 
             $this->line("[{$receivedTopic}] {$message}");
-            $this->info("Broker 1 simple subscriber listening on: {$message}");
         }, 0);
 
         $mqtt->loop(true);
