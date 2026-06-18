@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -60,88 +61,122 @@ class ParseSubscriberMqtt extends Command
                 $payload = json_decode($msg->message, true);
 
                 if (!is_array($payload)) {
-                    throw new \Exception("Invalid JSON message ID {$msg->id}: " . json_last_error_msg());
+                    throw new \InvalidArgumentException(
+                        "Invalid JSON message ID {$msg->id}: " . json_last_error_msg()
+                    );
                 }
+
+                $this->validatePayloadStructure($payload, $msg->id);
 
                 /**
                  * =========================
                  * 1. UPSERT DEVICES
-                 * Format JSON:
-                 * devices[] = id_esp, name_esp, mac_esp, ip_esp, loc_esp, timestamp
+                 * Match by id_esp OR mac_esp
                  * =========================
                  */
-                if (!empty($payload['devices']) && is_array($payload['devices'])) {
+                if (!empty($payload['devices'])) {
                     foreach ($payload['devices'] as $device) {
-                        $idEsp = $device['id_esp'] ?? null;
-                        $nameEsp = $device['name_esp'] ?? null;
-                        $macEsp = $device['mac_esp'] ?? null;
+                        $idEsp   = $this->normalizeString($device['id_esp'] ?? null);
+                        $nameEsp = $this->normalizeString($device['name_esp'] ?? null);
+                        $macEsp  = $this->normalizeMac($device['mac_esp'] ?? null);
+                        $ipEsp   = $this->normalizeString($device['ip_esp'] ?? null);
+                        $locEsp  = $this->normalizeString($device['loc_esp'] ?? null);
+                        $ts      = $this->normalizeTimestamp($device['timestamp'] ?? null);
 
                         if (!$idEsp || !$nameEsp || !$macEsp) {
-                            throw new \Exception("Invalid device payload on message ID {$msg->id}");
+                            throw new \InvalidArgumentException(
+                                "Invalid device payload structure on message ID {$msg->id}"
+                            );
                         }
 
-                        $exists = DB::table('device_esp')
+                        $existingById = DB::table('device_esp')
                             ->where('id_esp', $idEsp)
-                            ->exists();
+                            ->first();
 
-                        if ($exists) {
+                        if ($existingById) {
                             DB::table('device_esp')
-                                ->where('id_esp', $idEsp)
+                                ->where('id', $existingById->id)
                                 ->update([
-                                    'name_esp' => $nameEsp,
-                                    'mac_esp' => $macEsp,
-                                    'ip_esp' => $device['ip_esp'] ?? null,
-                                    'loc_esp' => $device['loc_esp'] ?? null,
-                                    'timestamp' => $device['timestamp'] ?? null,
+                                    'name_esp'   => $nameEsp,
+                                    'mac_esp'    => $macEsp,
+                                    'ip_esp'     => $ipEsp,
+                                    'loc_esp'    => $locEsp,
+                                    'timestamp'  => $ts,
                                     'updated_at' => now(),
                                 ]);
-                        } else {
-                            DB::table('device_esp')->insert([
-                                'id_esp' => $idEsp,
-                                'name_esp' => $nameEsp,
-                                'mac_esp' => $macEsp,
-                                'ip_esp' => $device['ip_esp'] ?? null,
-                                'loc_esp' => $device['loc_esp'] ?? null,
-                                'timestamp' => $device['timestamp'] ?? null,
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ]);
+
+                            continue;
                         }
+
+                        $existingByMac = DB::table('device_esp')
+                            ->where('mac_esp', $macEsp)
+                            ->first();
+
+                        if ($existingByMac) {
+                            DB::table('device_esp')
+                                ->where('id', $existingByMac->id)
+                                ->update([
+                                    'id_esp'     => $idEsp,
+                                    'name_esp'   => $nameEsp,
+                                    'mac_esp'    => $macEsp,
+                                    'ip_esp'     => $ipEsp,
+                                    'loc_esp'    => $locEsp,
+                                    'timestamp'  => $ts,
+                                    'updated_at' => now(),
+                                ]);
+
+                            continue;
+                        }
+
+                        DB::table('device_esp')->insert([
+                            'id_esp'      => $idEsp,
+                            'name_esp'    => $nameEsp,
+                            'mac_esp'     => $macEsp,
+                            'ip_esp'      => $ipEsp,
+                            'loc_esp'     => $locEsp,
+                            'timestamp'   => $ts,
+                            'created_at'  => now(),
+                            'updated_at'  => now(),
+                        ]);
                     }
                 }
 
                 /**
                  * =========================
                  * 2. INSERT SENSORS
-                 * Format JSON:
-                 * sensors[] = id_esp, id_sensor, name_sensor, val_A ... val_H, timestamp
                  * =========================
                  */
-                if (!empty($payload['sensors']) && is_array($payload['sensors'])) {
+                if (!empty($payload['sensors'])) {
                     foreach ($payload['sensors'] as $sensor) {
-                        $idEsp = $sensor['id_esp'] ?? null;
+                        $idEsp = $this->normalizeString($sensor['id_esp'] ?? null);
 
-                        if (!$idEsp || empty($sensor['id_sensor']) || empty($sensor['name_sensor'])) {
-                            throw new \Exception("Invalid sensor payload on message ID {$msg->id}");
+                        if (
+                            !$idEsp ||
+                            !$this->normalizeString($sensor['id_sensor'] ?? null) ||
+                            !$this->normalizeString($sensor['name_sensor'] ?? null)
+                        ) {
+                            throw new \InvalidArgumentException(
+                                "Invalid sensor payload structure on message ID {$msg->id}"
+                            );
                         }
 
                         $this->ensureDeviceExists($idEsp, $msg->id, 'sensor');
 
                         DB::table('device_sensor')->insert([
-                            'id_esp' => $idEsp,
-                            'id_sensor' => $sensor['id_sensor'],
-                            'name_sensor' => $sensor['name_sensor'],
-                            'val_A' => $sensor['val_A'] ?? null,
-                            'val_B' => $sensor['val_B'] ?? null,
-                            'val_C' => $sensor['val_C'] ?? null,
-                            'val_D' => $sensor['val_D'] ?? null,
-                            'val_E' => $sensor['val_E'] ?? null,
-                            'val_F' => $sensor['val_F'] ?? null,
-                            'val_G' => $sensor['val_G'] ?? null,
-                            'val_H' => $sensor['val_H'] ?? null,
-                            'timestamp' => $sensor['timestamp'] ?? null,
-                            'created_at' => now(),
-                            'updated_at' => now(),
+                            'id_esp'      => $idEsp,
+                            'id_sensor'   => $this->normalizeString($sensor['id_sensor'] ?? null),
+                            'name_sensor' => $this->normalizeString($sensor['name_sensor'] ?? null),
+                            'val_A'       => $sensor['val_A'] ?? null,
+                            'val_B'       => $sensor['val_B'] ?? null,
+                            'val_C'       => $sensor['val_C'] ?? null,
+                            'val_D'       => $sensor['val_D'] ?? null,
+                            'val_E'       => $sensor['val_E'] ?? null,
+                            'val_F'       => $sensor['val_F'] ?? null,
+                            'val_G'       => $sensor['val_G'] ?? null,
+                            'val_H'       => $sensor['val_H'] ?? null,
+                            'timestamp'   => $this->normalizeTimestamp($sensor['timestamp'] ?? null),
+                            'created_at'  => now(),
+                            'updated_at'  => now(),
                         ]);
                     }
                 }
@@ -149,68 +184,70 @@ class ParseSubscriberMqtt extends Command
                 /**
                  * =========================
                  * 3. INSERT ACTUATORS
-                 * Format JSON:
-                 * actuators[] = id_esp, id_act, name_act, val_A ... val_D, timestamp
                  * =========================
                  */
-                if (!empty($payload['actuators']) && is_array($payload['actuators'])) {
+                if (!empty($payload['actuators'])) {
                     foreach ($payload['actuators'] as $act) {
-                        $idEsp = $act['id_esp'] ?? null;
+                        $idEsp = $this->normalizeString($act['id_esp'] ?? null);
 
-                        if (!$idEsp || empty($act['id_act']) || empty($act['name_act'])) {
-                            throw new \Exception("Invalid actuator payload on message ID {$msg->id}");
+                        if (
+                            !$idEsp ||
+                            !$this->normalizeString($act['id_act'] ?? null) ||
+                            !$this->normalizeString($act['name_act'] ?? null)
+                        ) {
+                            throw new \InvalidArgumentException(
+                                "Invalid actuator payload structure on message ID {$msg->id}"
+                            );
                         }
 
                         $this->ensureDeviceExists($idEsp, $msg->id, 'actuator');
 
                         DB::table('device_act')->insert([
-                            'id_esp' => $idEsp,
-                            'id_act' => $act['id_act'],
-                            'name_act' => $act['name_act'],
-                            'val_A' => $act['val_A'] ?? null,
-                            'val_B' => $act['val_B'] ?? null,
-                            'val_C' => $act['val_C'] ?? null,
-                            'val_D' => $act['val_D'] ?? null,
-                            'timestamp' => $act['timestamp'] ?? null,
-                            'created_at' => now(),
-                            'updated_at' => now(),
+                            'id_esp'      => $idEsp,
+                            'id_act'      => $this->normalizeString($act['id_act'] ?? null),
+                            'name_act'    => $this->normalizeString($act['name_act'] ?? null),
+                            'val_A'       => $act['val_A'] ?? null,
+                            'val_B'       => $act['val_B'] ?? null,
+                            'val_C'       => $act['val_C'] ?? null,
+                            'val_D'       => $act['val_D'] ?? null,
+                            'timestamp'   => $this->normalizeTimestamp($act['timestamp'] ?? null),
+                            'created_at'  => now(),
+                            'updated_at'  => now(),
                         ]);
                     }
                 }
 
                 /**
                  * =========================
-                 * 4. INSERT EVENTS → status_news
-                 * Format JSON:
-                 * events[] = id_esp, status_esp, news_esp, timestamp
+                 * 4. INSERT EVENTS
                  * =========================
                  */
-                if (!empty($payload['events']) && is_array($payload['events'])) {
+                if (!empty($payload['events'])) {
                     foreach ($payload['events'] as $event) {
-                        $idEsp = $event['id_esp'] ?? null;
+                        $idEsp = $this->normalizeString($event['id_esp'] ?? null);
 
-                        if (!$idEsp || empty($event['status_esp'])) {
-                            throw new \Exception("Invalid event payload on message ID {$msg->id}");
+                        if (
+                            !$idEsp ||
+                            !$this->normalizeString($event['status_esp'] ?? null)
+                        ) {
+                            throw new \InvalidArgumentException(
+                                "Invalid event payload structure on message ID {$msg->id}"
+                            );
                         }
 
                         $this->ensureDeviceExists($idEsp, $msg->id, 'event');
 
                         DB::table('status_news')->insert([
-                            'id_esp' => $idEsp,
-                            'status_esp' => $event['status_esp'],
-                            'news_esp' => $event['news_esp'] ?? null,
-                            'timestamp' => $event['timestamp'] ?? null,
-                            'created_at' => now(),
-                            'updated_at' => now(),
+                            'id_esp'      => $idEsp,
+                            'status_esp'  => $this->normalizeString($event['status_esp'] ?? null),
+                            'news_esp'    => $this->normalizeString($event['news_esp'] ?? null),
+                            'timestamp'   => $this->normalizeTimestamp($event['timestamp'] ?? null),
+                            'created_at'  => now(),
+                            'updated_at'  => now(),
                         ]);
                     }
                 }
 
-                /**
-                 * =========================
-                 * 5. DELETE MESSAGE IF SUCCESS
-                 * =========================
-                 */
                 DB::table('subscriber_mqtt')
                     ->where('id', $msg->id)
                     ->delete();
@@ -218,8 +255,12 @@ class ParseSubscriberMqtt extends Command
                 DB::commit();
 
                 $processed++;
-
                 $this->info("SUCCESS processed message ID: {$msg->id}");
+            } catch (\InvalidArgumentException $e) {
+                DB::rollBack();
+
+                $this->deleteInvalidMessage($msg->id, $e->getMessage());
+                $processed++;
             } catch (Throwable $e) {
                 DB::rollBack();
 
@@ -230,6 +271,55 @@ class ParseSubscriberMqtt extends Command
         return $processed;
     }
 
+    private function validatePayloadStructure(array $payload, int|string $messageId): void
+    {
+        $allowedKeys = ['devices', 'sensors', 'actuators', 'events'];
+        $payloadKeys = array_keys($payload);
+
+        $unknownKeys = array_diff($payloadKeys, $allowedKeys);
+        if (!empty($unknownKeys)) {
+            throw new \InvalidArgumentException(
+                "Unknown top-level key(s) on message ID {$messageId}: " . implode(', ', $unknownKeys)
+            );
+        }
+
+        $presentKeys = array_intersect($allowedKeys, $payloadKeys);
+        if (empty($presentKeys)) {
+            throw new \InvalidArgumentException(
+                "Unsupported payload structure on message ID {$messageId}"
+            );
+        }
+
+        foreach ($allowedKeys as $key) {
+            if (!array_key_exists($key, $payload)) {
+                continue;
+            }
+
+            if (!is_array($payload[$key])) {
+                throw new \InvalidArgumentException(
+                    "Invalid structure on message ID {$messageId}: {$key} must be an array"
+                );
+            }
+
+            foreach ($payload[$key] as $index => $item) {
+                if (!is_array($item)) {
+                    throw new \InvalidArgumentException(
+                        "Invalid structure on message ID {$messageId}: {$key}[{$index}] must be an object/array"
+                    );
+                }
+            }
+        }
+    }
+
+    private function deleteInvalidMessage(int|string $messageId, string $reason): void
+    {
+        DB::table('subscriber_mqtt')
+            ->where('id', $messageId)
+            ->delete();
+
+        $this->warn("DELETED invalid message ID {$messageId}: {$reason}");
+    }
+
     private function ensureDeviceExists(string $idEsp, int|string $messageId, string $payloadType): void
     {
         $exists = DB::table('device_esp')
@@ -237,7 +327,57 @@ class ParseSubscriberMqtt extends Command
             ->exists();
 
         if (!$exists) {
-            throw new \Exception("Invalid {$payloadType} payload on message ID {$messageId}: id_esp {$idEsp} belum ada di device_esp");
+            throw new \RuntimeException(
+                "Invalid {$payloadType} payload on message ID {$messageId}: id_esp {$idEsp} belum ada di device_esp"
+            );
         }
+    }
+
+    private function normalizeTimestamp(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (
+            $value === '1970-01-01 00:00:00' ||
+            $value === '0000-00-00 00:00:00'
+        ) {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d H:i:s', $value)->format('Y-m-d H:i:s');
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    private function normalizeString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function normalizeMac(mixed $value): ?string
+    {
+        $value = $this->normalizeString($value);
+
+        if ($value === null) {
+            return null;
+        }
+
+        return strtoupper($value);
     }
 }
